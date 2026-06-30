@@ -231,44 +231,71 @@ async function sendImageData(base64data) {
     }
 
     function initChat() {
-        if (unsubscribeChat) unsubscribeChat();
-        const stream = document.getElementById('chat-messages');
-        stream.innerHTML = ''; 
-        
-        unsubscribeChat = db.collection('messages')
-            .where('roomCode', '==', currentRoomCode)
-            .orderBy('timestamp', 'asc')
-            .onSnapshot(snapshot => {
-                // Instead of initialLoad flag, let's just render what comes in
-                stream.innerHTML = ''; 
-                snapshot.forEach(doc => {
-                    renderMessage(doc.data(), stream);
-                });
-                stream.scrollTop = stream.scrollHeight;
+    if (unsubscribeChat) unsubscribeChat();
+    const stream = document.getElementById('chat-messages');
+    
+    // Use 'source: default' implicitly (Firestore's default behavior) 
+    // but ensure we are targeting the right room
+    unsubscribeChat = db.collection('messages')
+        .where('roomCode', '==', currentRoomCode)
+        .orderBy('timestamp', 'asc')
+        .onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
+            // Check if the update is from the local cache
+            if (snapshot.metadata.fromCache) {
+                console.log("Loading from cache...");
+            }
+            
+            stream.innerHTML = '';
+            snapshot.forEach(doc => {
+                renderMessage(doc.data(), stream);
             });
-    }
+            
+            // Final scroll guarantee: use a timeout to wait for image rendering
+            setTimeout(() => {
+                stream.scrollTop = stream.scrollHeight;
+            }, 300); 
+        });
+}
+    
     document.getElementById('send-btn').addEventListener('click', sendMessage);
-    document.getElementById('msg-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+    document.getElementById('msg-input').addEventListener('keypress', (e) => { if (e.key === 'Enter')            sendMessage(); });
 
     function sendMessage() {
-        const input = document.getElementById('msg-input');
-        let text = input.value.trim();
-        if (!text) return;
+    const input = document.getElementById('msg-input');
+    let text = input.value.trim();
+    if (!text) return;
 
-        if (autoCapitalize && text.length > 0) text = text.charAt(0).toUpperCase() + text.slice(1);
-
-        db.collection('messages').add({
-            text: text,
-            senderEmail: currentUser.email,
-            senderName: currentUser.displayName,
-            roomCode: currentRoomCode,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        db.collection('rooms').doc(currentRoomCode).set({ typingUser: null, typingEmail: null }, { merge: true });
-        input.value = '';
+    if (autoCapitalize && text.length > 0) {
+        text = text.charAt(0).toUpperCase() + text.slice(1);
     }
 
+    // 1. Create a local timestamp object
+    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+
+    // 2. Add the message
+    db.collection('messages').add({
+        text: text,
+        senderEmail: currentUser.email,
+        senderName: currentUser.displayName,
+        roomCode: currentRoomCode,
+        // The server will overwrite this with a precise server time, 
+        // but for the initial render, the query should pick it up faster.
+        timestamp: timestamp 
+    }).catch(err => {
+        console.error("Firebase Error: ", err);
+        alert("Failed to send: " + err.message);
+    });
+
+    // 3. Clear typing indicator
+    db.collection('rooms').doc(currentRoomCode).set({ 
+        typingUser: null, 
+        typingEmail: null 
+    }, { merge: true });
+
+    // 4. Clear input immediately for responsiveness
+    input.value = '';
+}
+     
     // --- Typing & Timer & Wipe Logic ---
     document.getElementById('msg-input').addEventListener('input', () => {
         if (!currentRoomCode) return;
