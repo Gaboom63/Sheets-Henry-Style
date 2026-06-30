@@ -1,14 +1,3 @@
-// --- PASTE YOUR FIREBASE CONFIG HERE ---
-const firebaseConfig = {
-    apiKey: "AIzaSyApDZJFHjW7yaUOovdZqDOzTMKXP_MKMkg",
-    authDomain: "sheets-replacement-6967c.firebaseapp.com",
-    projectId: "sheets-replacement-6967c",
-    storageBucket: "sheets-replacement-6967c.firebasestorage.app",
-    messagingSenderId: "1081077842701",
-    appId: "1:1081077842701:web:5c5b50d55e82bdb8976644"
-};
-// ---------------------------------------
-
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -24,6 +13,7 @@ let timerInterval = null;
 let unreadCount = 0;
 let isTabFocused = true;
 let autoCapitalize = true;
+let hasJoined = false; // Moved to top
 
 window.addEventListener('focus', () => { isTabFocused = true; unreadCount = 0; document.title = "Private Chat"; });
 window.addEventListener('blur', () => { isTabFocused = false; });
@@ -95,27 +85,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Remove the 'hasJoined' variable from inside startApp. 
-// Move it to the very top of your file (outside the DOMContentLoaded)
-let hasJoined = false; 
+    function startApp() {
+        appContainer.classList.remove('hidden');
+        document.getElementById('room-title').textContent = `Room: ${currentRoomCode}`;   
+        
+        updateClock();
+        initChat();
+        initTypingListener();
+        initRoomManager();
+        trackPresence();
+    }
 
-function startApp() {
-    appContainer.classList.remove('hidden');
-    document.getElementById('room-title').textContent = `Room: ${currentRoomCode}`;   
-    
-    updateClock();
-    initChat();
-    initTypingListener();
-    initRoomManager();
-    trackPresence();
-}
-
-    // --- Media & Camera Logic ---
+    // --- Media & Camera Logic (UPDATED FOR FREE IMAGE HOSTING) ---
     document.getElementById('upload-btn').addEventListener('click', () => document.getElementById('image-upload').click());
     
     document.getElementById('image-upload').addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        if (file) await uploadAndSendImage(file);
+        if (file) await uploadToImgBBAndSend(file);
     });
 
     const cameraModal = document.getElementById('camera-modal');
@@ -138,64 +124,68 @@ function startApp() {
     });
 
     document.getElementById('snap-btn').addEventListener('click', () => {
-    const canvas = document.getElementById('camera-canvas');
-    canvas.width = cameraFeed.videoWidth;
-    canvas.height = cameraFeed.videoHeight;
-    canvas.getContext('2d').drawImage(cameraFeed, 0, 0);
-    
-    // Convert to URL so we can show it to the user
-    const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-    
-    // Ask for confirmation
-    const confirmSend = confirm("Look good? Click OK to send this photo.");
-    if (confirmSend) {
-        // Stop camera
-        if (videoStream) videoStream.getTracks().forEach(track => track.stop());
-        cameraModal.classList.add('hidden');
+        const canvas = document.getElementById('camera-canvas');
+        canvas.width = cameraFeed.videoWidth;
+        canvas.height = cameraFeed.videoHeight;
+        canvas.getContext('2d').drawImage(cameraFeed, 0, 0);
         
-        // Send the image
-        sendImageData(dataURL);
-    }
-});
-
-// Helper function to send the image
-async function sendImageData(base64data) {
-    await db.collection('messages').add({
-        text: "",
-        imageUrl: base64data,
-        senderEmail: currentUser.email,
-        senderName: currentUser.displayName,
-        roomCode: currentRoomCode,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        // Convert to blob for upload
+        canvas.toBlob(async (blob) => {
+            const confirmSend = confirm("Look good? Click OK to send this photo.");
+            if (confirmSend) {
+                if (videoStream) videoStream.getTracks().forEach(track => track.stop());
+                cameraModal.classList.add('hidden');
+                
+                // Send the image via ImgBB
+                await uploadToImgBBAndSend(blob);
+            }
+        }, 'image/jpeg', 0.8);
     });
-}
 
-    // No Storage required, everything happens in Firestore!
-    async function uploadAndSendImage(fileOrBlob) {
-        const reader = new FileReader();
-        reader.readAsDataURL(fileOrBlob);
+    // Helper function to upload to ImgBB and save the URL to Firestore
+    async function uploadToImgBBAndSend(fileOrBlob) {
+        if (IMGBB_API_KEY === "PASTE_YOUR_FREE_IMGBB_API_KEY_HERE") {
+            alert("Please add your free ImgBB API key to the code to send images!");
+            return;
+        }
+
+        document.getElementById('msg-input').placeholder = "Uploading image...";
         
-        reader.onloadend = async () => {
-            const base64data = reader.result;
-            
-            // Send the entire image as a base64 string directly in the message
-            await db.collection('messages').add({
-                text: "",
-                imageUrl: base64data, // This is the image encoded as text
-                senderEmail: currentUser.email,
-                senderName: currentUser.displayName,
-                roomCode: currentRoomCode,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        const formData = new FormData();
+        formData.append("image", fileOrBlob);
+
+        try {
+            const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+                method: 'POST',
+                body: formData
             });
+            const data = await response.json();
+            
+            if (data.success) {
+                // Only save the URL to Firestore, saving you massive quota limits!
+                await db.collection('messages').add({
+                    text: "",
+                    imageUrl: data.data.url, // Tiny URL string instead of massive base64
+                    senderEmail: currentUser.email,
+                    senderName: currentUser.displayName,
+                    roomCode: currentRoomCode,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } else {
+                alert("Image upload failed.");
+            }
+        } catch (error) {
+            console.error("Upload error:", error);
+            alert("Failed to upload image.");
+        } finally {
             document.getElementById('msg-input').placeholder = "Type a message...";
-        };
+        }
     }
     
-    // --- Message Rendering & Chat Sync ---
+    // --- Message Rendering & Chat Sync (OPTIMIZED READS) ---
     function renderMessage(data, stream) {
         const msgDiv = document.createElement('div');
         
-        // 1. Handle System Messages FIRST so we don't try to split an email that isn't there
         if (data.isSystem) {
             msgDiv.className = 'message system-msg';
             msgDiv.style.cssText = 'text-align: center; width: 100%; opacity: 0.6; font-size: 0.85rem; padding: 10px;';
@@ -204,14 +194,12 @@ async function sendImageData(base64data) {
             return;
         }
 
-        // 2. Normal Message Rendering
         const isMe = data.senderEmail === currentUser.email;
         msgDiv.className = `message ${isMe ? 'sent' : 'received'}`;
         
         const nameSpan = document.createElement('div');
         nameSpan.className = 'msg-sender';
         
-        // SAFE SPLIT: Only try to split if senderEmail exists
         const senderDisplay = data.senderName || (data.senderEmail ? data.senderEmail.split('@')[0] : 'Unknown');
         nameSpan.textContent = senderDisplay;
         
@@ -231,96 +219,93 @@ async function sendImageData(base64data) {
     }
 
     function initChat() {
-    if (unsubscribeChat) unsubscribeChat();
-    const stream = document.getElementById('chat-messages');
-    
-    // Use 'source: default' implicitly (Firestore's default behavior) 
-    // but ensure we are targeting the right room
-    unsubscribeChat = db.collection('messages')
-        .where('roomCode', '==', currentRoomCode)
-        .orderBy('timestamp', 'asc')
-        .onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
-            // Check if the update is from the local cache
-            if (snapshot.metadata.fromCache) {
-                console.log("Loading from cache...");
-            }
-            
-            stream.innerHTML = '';
-            snapshot.forEach(doc => {
-                renderMessage(doc.data(), stream);
+        if (unsubscribeChat) unsubscribeChat();
+        const stream = document.getElementById('chat-messages');
+        
+        // limitToLast(20) keeps reads low, orderBy asc keeps them in the right order naturally
+        unsubscribeChat = db.collection('messages')
+            .where('roomCode', '==', currentRoomCode)
+            .orderBy('timestamp', 'asc')
+            .limitToLast(20)
+            .onSnapshot((snapshot) => {
+                // Prevent duplicate UI renders from local cache when writing
+                if (snapshot.metadata.hasPendingWrites) return; 
+                
+                stream.innerHTML = '';
+                snapshot.forEach(doc => {
+                    renderMessage(doc.data(), stream);
+                });
+                
+                setTimeout(() => {
+                    stream.scrollTop = stream.scrollHeight;
+                }, 100); 
             });
-            
-            // Final scroll guarantee: use a timeout to wait for image rendering
-            setTimeout(() => {
-                stream.scrollTop = stream.scrollHeight;
-            }, 300); 
-        });
-}
+    }
     
     document.getElementById('send-btn').addEventListener('click', sendMessage);
-    document.getElementById('msg-input').addEventListener('keypress', (e) => { if (e.key === 'Enter')            sendMessage(); });
+    document.getElementById('msg-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
     function sendMessage() {
-    const input = document.getElementById('msg-input');
-    let text = input.value.trim();
-    if (!text) return;
+        const input = document.getElementById('msg-input');
+        let text = input.value.trim();
+        if (!text) return;
 
-    if (autoCapitalize && text.length > 0) {
-        text = text.charAt(0).toUpperCase() + text.slice(1);
+        if (autoCapitalize && text.length > 0) {
+            text = text.charAt(0).toUpperCase() + text.slice(1);
+        }
+
+        const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+
+        db.collection('messages').add({
+            text: text,
+            senderEmail: currentUser.email,
+            senderName: currentUser.displayName,
+            roomCode: currentRoomCode,
+            timestamp: timestamp 
+        }).catch(err => {
+            console.error("Firebase Error: ", err);
+            alert("Failed to send: " + err.message);
+        });
+
+        // Clear input immediately
+        input.value = '';
+        
+        // Force typing indicator to turn off immediately
+        isTyping = false;
+        db.collection('rooms').doc(currentRoomCode).set({ typingUser: null, typingEmail: null }, { merge: true });
     }
-
-    // 1. Create a local timestamp object
-    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
-
-    // 2. Add the message
-    db.collection('messages').add({
-        text: text,
-        senderEmail: currentUser.email,
-        senderName: currentUser.displayName,
-        roomCode: currentRoomCode,
-        // The server will overwrite this with a precise server time, 
-        // but for the initial render, the query should pick it up faster.
-        timestamp: timestamp 
-    }).catch(err => {
-        console.error("Firebase Error: ", err);
-        alert("Failed to send: " + err.message);
-    });
-
-    // 3. Clear typing indicator
-    db.collection('rooms').doc(currentRoomCode).set({ 
-        typingUser: null, 
-        typingEmail: null 
-    }, { merge: true });
-
-    // 4. Clear input immediately for responsiveness
-    input.value = '';
-}
      
-    // --- Typing & Timer & Wipe Logic ---
+    // --- Typing Logic (OPTIMIZED WRITES) ---
+    let isTyping = false;
     document.getElementById('msg-input').addEventListener('input', () => {
         if (!currentRoomCode) return;
-        db.collection('rooms').doc(currentRoomCode).set({ typingUser: currentUser.displayName, typingEmail: currentUser.email }, { merge: true });
+        
+        // Only write to database ONCE when you start typing, not every keystroke
+        if (!isTyping) {
+            isTyping = true;
+            db.collection('rooms').doc(currentRoomCode).set({ typingUser: currentUser.displayName, typingEmail: currentUser.email }, { merge: true });
+        }
+        
         clearTimeout(typingTimeout);
         typingTimeout = setTimeout(() => {
+            isTyping = false;
             db.collection('rooms').doc(currentRoomCode).set({ typingUser: null, typingEmail: null }, { merge: true });
         }, 2000);
     });
 
     function initTypingListener() {
-    if (unsubscribeTyping) unsubscribeTyping();
-    
-    unsubscribeTyping = db.collection('rooms').doc(currentRoomCode).onSnapshot(doc => {
-        const data = doc.data();
-        // If data exists and the sender is NOT you, show the indicator
-        if (data && data.typingUser && data.typingEmail !== currentUser.email) {
-            document.getElementById('typing-name').textContent = data.typingUser;
-            typingIndicator.classList.remove('hidden');
-        } else if (!data || !data.typingUser) {
-            // Only hide if the database says typing is null
-            typingIndicator.classList.add('hidden');
-        }
-    });
-}
+        if (unsubscribeTyping) unsubscribeTyping();
+        
+        unsubscribeTyping = db.collection('rooms').doc(currentRoomCode).onSnapshot(doc => {
+            const data = doc.data();
+            if (data && data.typingUser && data.typingEmail !== currentUser.email) {
+                document.getElementById('typing-name').textContent = data.typingUser;
+                typingIndicator.classList.remove('hidden');
+            } else {
+                typingIndicator.classList.add('hidden');
+            }
+        });
+    }
 
     // 24 Hour Timer & 2-Party Consent Wipe
     function initRoomManager() {
@@ -329,27 +314,22 @@ async function sendImageData(base64data) {
         unsubscribeRoomMeta = db.collection('rooms').doc(currentRoomCode).onSnapshot(async (doc) => {
             let data = doc.data();
             
-            // If room has no timer, set it 24h from now
             if (!data || !data.clearsAt) {
                 await db.collection('rooms').doc(currentRoomCode).set({ clearsAt: Date.now() + 86400000, clearRequests: [] }, { merge: true });
                 return; 
             }
 
-            // Check if both users clicked clear, or if 24h passed
             if ((data.clearRequests && data.clearRequests.length >= 2) || (Date.now() >= data.clearsAt)) {
-                // To avoid duplicate wipes, only trigger if you are the one looking at it right now
                 await wipeChat();
                 await db.collection('rooms').doc(currentRoomCode).set({ clearsAt: Date.now() + 86400000, clearRequests: [] }, { merge: true });
             }
 
-            // Update UI Timer
             clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 const hoursLeft = Math.max(0, Math.ceil((data.clearsAt - Date.now()) / (1000 * 60 * 60)));
                 document.getElementById('countdown-timer').textContent = `⏳ Clearing in ${hoursLeft} Hours`;
-            }, 60000); // Check every minute
+            }, 60000);
             
-            // Set initial timer text immediately
             const initHours = Math.max(0, Math.ceil((data.clearsAt - Date.now()) / (1000 * 60 * 60)));
             document.getElementById('countdown-timer').textContent = `⏳ Clearing in ${initHours} Hours`;
         });
@@ -404,22 +384,17 @@ async function sendImageData(base64data) {
     });
 
     document.getElementById('video-call-btn').addEventListener('click', () => {
-    // This opens a private, zero-audio-default video room based on your Room Code
-    window.open(`https://meet.jit.si/${currentRoomCode}-private-video`, '_blank');
-});
+        window.open(`https://meet.jit.si/${currentRoomCode}-private-video`, '_blank');
+    });
 });
 
 function updateClock() {
     const now = new Date();
-    
-    // Format the time as HH:MM
     const timeString = now.toLocaleTimeString('en-US', { 
         hour12: false, 
         hour: '2-digit', 
         minute: '2-digit' 
     });
-    
-    // Display it on the page
     document.getElementById('room-time').textContent = timeString;
 }
 setInterval(updateClock, 10000);
@@ -434,29 +409,27 @@ picker.addEventListener('emoji-click', event => {
     picker.classList.add('hidden');
 });
 
-// Presence System (Join/Leave)
+// Presence System (Join/Leave - OPTIMIZED WITH SESSION STORAGE)
 function trackPresence() {
-    const presenceRef = db.collection('presence').doc(currentUser.email);
-    
-    // Set as online
-    presenceRef.set({ status: 'online', name: currentUser.displayName });
-
-    // Send Join Message
-    db.collection('messages').add({
-        text: `${currentUser.displayName} Joined The Chat! Welcome ${currentUser.displayName}!`,
-        isSystem: true,
-        roomCode: currentRoomCode,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
-}
-
-window.addEventListener('beforeunload', () => {
-        // Note: Browsers limit how much code runs here, 
-        // but adding to Firestore usually works for a quick system message
+    // Only send the join message once per browser session to prevent refresh-spam
+    if (!sessionStorage.getItem('hasJoinedSession')) {
+        sessionStorage.setItem('hasJoinedSession', 'true');
         db.collection('messages').add({
-            text: `${currentUser.displayName} left the chat. Goodbye ${currentUser.displayName} :(`,
+            text: `${currentUser.displayName} Joined The Chat! Welcome ${currentUser.displayName}!`,
             isSystem: true,
             roomCode: currentRoomCode,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
+    }
+}
+
+window.addEventListener('beforeunload', () => {
+    // Clear the session so it triggers again if they actually close and come back later
+    sessionStorage.removeItem('hasJoinedSession');
+    db.collection('messages').add({
+        text: `${currentUser.displayName} left the chat. Goodbye ${currentUser.displayName} :(`,
+        isSystem: true,
+        roomCode: currentRoomCode,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
     });
+});
