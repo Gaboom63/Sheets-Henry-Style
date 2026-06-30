@@ -205,3 +205,39 @@ button:active { transform: scale(0.96); }
     0%, 80%, 100% { transform: scale(0.5); opacity: 0.4; }
     40% { transform: scale(1.2); opacity: 1; }
 }
+
+/* --- Image & Media Styles --- */
+.message img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin-top: 6px;
+    display: block;
+}
+
+.icon-btn {
+    background: var(--card-bg);
+    border-radius: 8px;
+    font-size: 1.2rem;
+    padding: 10px 12px;
+    color: var(--text-main);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.icon-btn:hover { background: #45475a; }
+
+/* Dynamic Message Styling */
+.message-content {
+    font-size: var(--msg-size, 16px);
+    font-weight: var(--msg-weight, normal);
+    font-style: var(--msg-style, normal);
+}
+
+#room-time {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1rem;
+    opacity: 0.8;
+    pointer-events: none; /* Allows clicking through it if needed */
+}

@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sheets. Henry Style</title>
+    <title>Private Chat</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js" type="module"></script>
 </head>
 <body>
 
@@ -20,7 +21,6 @@
     <div id="name-container" class="overlay hidden">
         <div class="glass-card">
             <h2>What do you want to be called?</h2>
-            <p class="subtitle">This is how your name will show up in chat.</p>
             <input type="text" id="display-name-input" placeholder="Your Name">
             <button id="save-name-btn" class="primary-btn">Save Name</button>
         </div>
@@ -29,9 +29,20 @@
     <div id="room-container" class="overlay hidden">
         <div class="glass-card">
             <h2>Join a Room</h2>
-            <p class="subtitle">Enter your secret room code to start chatting.</p>
             <input type="text" id="room-input" placeholder="e.g. SecretRoom123">
             <button id="join-room-btn" class="primary-btn">Enter Room</button>
+        </div>
+    </div>
+
+    <div id="camera-modal" class="overlay hidden">
+        <div class="glass-card" style="text-align: center;">
+            <h2>Say Hi! 👋</h2>
+            <video id="camera-feed" autoplay playsinline style="width:100%; border-radius: 8px; margin-bottom: 12px; background: #000;"></video>
+            <canvas id="camera-canvas" class="hidden"></canvas>
+            <div class="modal-buttons" style="justify-content: center;">
+                <button id="close-camera-btn" class="secondary-btn">Cancel</button>
+                <button id="snap-btn" class="primary-btn">📸 Snap & Send</button>
+            </div>
         </div>
     </div>
 
@@ -45,12 +56,24 @@
             </div>
 
             <div class="setting-group">
-                <label>Text Style</label>
+                <label>Font Family</label>
                 <select id="setting-font">
-                    <option value="system-ui, -apple-system, sans-serif">Standard</option>
-                    <option value="'OpenDyslexic', sans-serif">Dyslexia Friendly (OpenDyslexic)</option>
-                    <option value="'Comic Sans MS', cursive, sans-serif">Comic Sans</option>
-                </select>
+    <option value="system-ui, sans-serif">Standard</option>
+    <option value="'OpenDyslexic', sans-serif">Dyslexia Friendly</option>
+    <option value="'Montserrat', sans-serif">Montserrat</option>
+    <option value="'Times New Roman', serif">Times New Roman</option>
+    <option value="'Courier New', monospace">Typewriter</option>
+            </select>
+            </div>
+
+            <div class="setting-group">
+                <label>Message Size (<span id="size-label">16px</span>)</label>
+                <input type="range" id="setting-size" min="12" max="28" value="16" style="width: 100%;">
+            </div>
+
+            <div class="checkbox-group" style="display:flex; gap: 10px; margin-bottom: 10px;">
+                <label><input type="checkbox" id="setting-bold"> <b>Bold text</b></label>
+                <label><input type="checkbox" id="setting-italic"> <i>Italic text</i></label>
             </div>
 
             <div class="setting-group">
@@ -58,15 +81,14 @@
                 <input type="color" id="setting-color" value="#ff6b6b">
             </div>
 
-            <div class="checkbox-group">
+            <div class="checkbox-group" style="margin-bottom: 24px;">
                 <input type="checkbox" id="setting-capitalize" checked>
                 <label>Auto-Capitalize First Letter</label>
             </div>
 
-            <div class="setting-group">
-                <label>Switch Room</label>
-                <input type="text" id="setting-room">
-            </div>
+            <div style="border-top: 1px solid var(--card-bg); margin: 20px 0;"></div>
+
+            <button id="req-clear-btn" class="primary-btn" style="background: #e06c75; width: 100%; margin-bottom: 12px;">⚠️ Clear Chat (Both must click)</button>
 
             <div class="modal-buttons">
                 <button id="close-settings-btn" class="secondary-btn">Cancel</button>
@@ -78,7 +100,13 @@
     <div id="app-container" class="hidden">
         <main class="chat-area">
             <header class="header-bar chat-header">
-                <h3 id="room-title">Messaging Room</h3>
+                <div>
+                    <h3 id="room-title">Messaging Room</h3>
+                    <div id="room-time">--:--</div>
+                    <div id="countdown-timer" style="font-size: 0.75rem; color: var(--accent); font-weight: bold; margin-top: 4px;">
+                        ⏳ Clearing in 24 Hours
+                    </div>
+                </div>
                 <button id="settings-btn" class="secondary-btn">⚙️ Settings</button>
             </header>
             
@@ -94,6 +122,12 @@
             </div>
             
             <div class="chat-input-bar">
+                <input type="file" id="image-upload" accept="image/*" class="hidden">
+                <button id="emoji-btn" class="icon-btn">😊</button>
+                <emoji-picker id="emoji-picker" class="hidden" style="position: absolute; bottom: 80px;"></emoji-picker>
+                <button id="upload-btn" class="icon-btn" title="Send Picture">🖼️</button>
+                <button id="camera-btn" class="icon-btn" title="Take Photo">📷</button>
+                <button id="video-call-btn" class="icon-btn" title="Video Call">🎥</button>
                 <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off">
                 <button id="send-btn" class="primary-btn">Send</button>
             </div>
