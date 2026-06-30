@@ -88,8 +88,13 @@
 
             <div style="border-top: 1px solid var(--card-bg); margin: 20px 0;"></div>
 
+            <div class="setting-group" style="margin-bottom: 15px;">
+    <label for="setting-imgbb-key">ImgBB API Key (For Photos):</label>
+    <input type="password" id="setting-imgbb-key" placeholder="Paste your key here..." style="width: 100%; padding: 8px; margin-top: 5px;">
+            </div>
+            
             <button id="req-clear-btn" class="primary-btn" style="background: #e06c75; width: 100%; margin-bottom: 12px;">⚠️ Clear Chat (Both must click)</button>
-
+        
             <div class="modal-buttons">
                 <button id="close-settings-btn" class="secondary-btn">Cancel</button>
                 <button id="save-settings-btn" class="primary-btn">Save Changes</button>
@@ -137,7 +142,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="config.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

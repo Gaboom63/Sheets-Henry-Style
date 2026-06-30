@@ -1,3 +1,15 @@
+// --- PASTE YOUR FIREBASE CONFIG HERE ---
+const firebaseConfig = {
+    apiKey: "AIzaSyApDZJFHjW7yaUOovdZqDOzTMKXP_MKMkg",
+    authDomain: "sheets-replacement-6967c.firebaseapp.com",
+    projectId: "sheets-replacement-6967c",
+    storageBucket: "sheets-replacement-6967c.firebasestorage.app",
+    messagingSenderId: "1081077842701",
+    appId: "1:1081077842701:web:5c5b50d55e82bdb8976644"
+};
+
+// ---------------------------------------
+
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -46,7 +58,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('setting-bold').checked = loadSetting('msgBold', 'false') === 'true';
     document.getElementById('setting-italic').checked = loadSetting('msgItalic', 'false') === 'true';
     document.getElementById('setting-capitalize').checked = autoCapitalize;
-
+    document.getElementById('setting-imgbb-key').value = loadSetting('imgbbKey', '');
+    
     document.getElementById('setting-size').addEventListener('input', (e) => {
         document.getElementById('size-label').textContent = e.target.value + 'px';
     });
@@ -143,44 +156,49 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Helper function to upload to ImgBB and save the URL to Firestore
-    async function uploadToImgBBAndSend(fileOrBlob) {
-        if (IMGBB_API_KEY === "PASTE_YOUR_FREE_IMGBB_API_KEY_HERE") {
-            alert("Please add your free ImgBB API key to the code to send images!");
-            return;
-        }
+    // Replace your current uploadToImgBBAndSend function with this one
+async function uploadToImgBBAndSend(fileOrBlob) {
+    // 1. Pull the key directly from Local Storage
+    const imgbbKey = localStorage.getItem('imgbbKey');
 
-        document.getElementById('msg-input').placeholder = "Uploading image...";
-        
-        const formData = new FormData();
-        formData.append("image", fileOrBlob);
-
-        try {
-            const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-                method: 'POST',
-                body: formData
-            });
-            const data = await response.json();
-            
-            if (data.success) {
-                // Only save the URL to Firestore, saving you massive quota limits!
-                await db.collection('messages').add({
-                    text: "",
-                    imageUrl: data.data.url, // Tiny URL string instead of massive base64
-                    senderEmail: currentUser.email,
-                    senderName: currentUser.displayName,
-                    roomCode: currentRoomCode,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            } else {
-                alert("Image upload failed.");
-            }
-        } catch (error) {
-            console.error("Upload error:", error);
-            alert("Failed to upload image.");
-        } finally {
-            document.getElementById('msg-input').placeholder = "Type a message...";
-        }
+    // 2. Stop them if they forgot to paste it in the settings
+    if (!imgbbKey) {
+        alert("Please paste your free ImgBB API key into the Settings menu to send photos!");
+        return;
     }
+
+    document.getElementById('msg-input').placeholder = "Uploading image...";
+    
+    const formData = new FormData();
+    formData.append("image", fileOrBlob);
+
+    try {
+        // 3. Use the dynamically loaded key here
+        const response = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            await db.collection('messages').add({
+                text: "",
+                imageUrl: data.data.url, 
+                senderEmail: currentUser.email,
+                senderName: currentUser.displayName,
+                roomCode: currentRoomCode,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } else {
+            alert("Image upload failed. Double-check your API key in Settings.");
+        }
+    } catch (error) {
+        console.error("Upload error:", error);
+        alert("Failed to upload image.");
+    } finally {
+        document.getElementById('msg-input').placeholder = "Type a message...";
+    }
+}
     
     // --- Message Rendering & Chat Sync (OPTIMIZED READS) ---
     function renderMessage(data, stream) {
@@ -355,6 +373,8 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsModal.classList.remove('hidden');
     });
 
+    localStorage.setItem('imgbbKey', document.getElementById('setting-imgbb-key').value.trim());
+    
     document.getElementById('close-settings-btn').addEventListener('click', () => settingsModal.classList.add('hidden'));
 
     document.getElementById('save-settings-btn').addEventListener('click', () => {
