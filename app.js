@@ -19,6 +19,21 @@ let unsubscribeChat = null;
 let unsubscribeTyping = null;
 let typingTimeout = null;
 
+// Notification State Tracking
+let unreadCount = 0;
+let isTabFocused = true;
+let autoCapitalize = true;
+
+window.addEventListener('focus', () => {
+    isTabFocused = true;
+    unreadCount = 0;
+    document.title = "Private Chat";
+});
+
+window.addEventListener('blur', () => {
+    isTabFocused = false;
+});
+
 // Ensure DOM is fully loaded before attaching listeners
 document.addEventListener('DOMContentLoaded', () => {
     
@@ -29,6 +44,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const appContainer = document.getElementById('app-container');
     const settingsModal = document.getElementById('settings-modal');
     const typingIndicator = document.getElementById('typing-indicator');
+
+    // Load Local Saved Settings
+    const savedColor = localStorage.getItem('appColor') || '#ff6b6b';
+    const savedFont = localStorage.getItem('appFont') || 'system-ui, -apple-system, sans-serif';
+    const savedCap = localStorage.getItem('appCap');
+    autoCapitalize = savedCap === null ? true : savedCap === 'true';
+
+    document.documentElement.style.setProperty('--accent', savedColor);
+    document.documentElement.style.setProperty('--font-family', savedFont);
+    document.getElementById('setting-color').value = savedColor;
+    document.getElementById('setting-font').value = savedFont;
+    document.getElementById('setting-capitalize').checked = autoCapitalize;
 
     // --- 1. Boot up & Auth ---
     document.getElementById('login-btn').addEventListener('click', () => {
@@ -83,35 +110,58 @@ document.addEventListener('DOMContentLoaded', () => {
         initTypingListener();
     }
 
-    // --- 2. Chat Logic ---
+    // Render Helper Function
+    function renderMessage(data, stream) {
+        const msgDiv = document.createElement('div');
+        const isMe = data.senderEmail === currentUser.email;
+        
+        msgDiv.className = `message ${isMe ? 'sent' : 'received'}`;
+        
+        const nameSpan = document.createElement('div');
+        nameSpan.className = 'msg-sender';
+        nameSpan.textContent = data.senderName || data.senderEmail.split('@')[0];
+        
+        const textSpan = document.createElement('div');
+        textSpan.textContent = data.text;
+
+        if (!isMe) msgDiv.appendChild(nameSpan);
+        msgDiv.appendChild(textSpan);
+        stream.appendChild(msgDiv);
+    }
+
+    // --- 2. Chat Logic (With Tab Notification Tracking) ---
     function initChat() {
         if (unsubscribeChat) unsubscribeChat();
+        let initialLoad = true;
+        
+        const stream = document.getElementById('chat-messages');
+        stream.innerHTML = ''; // Clear stream on room switch
         
         unsubscribeChat = db.collection('messages')
             .where('roomCode', '==', currentRoomCode)
             .orderBy('timestamp', 'asc')
             .onSnapshot(snapshot => {
-                const stream = document.getElementById('chat-messages');
-                stream.innerHTML = '';
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    const msgDiv = document.createElement('div');
-                    const isMe = data.senderEmail === currentUser.email;
-                    
-                    msgDiv.className = `message ${isMe ? 'sent' : 'received'}`;
-                    
-                    const nameSpan = document.createElement('div');
-                    nameSpan.className = 'msg-sender';
-                    nameSpan.textContent = data.senderName || data.senderEmail.split('@')[0];
-                    
-                    const textSpan = document.createElement('div');
-                    textSpan.textContent = data.text;
-
-                    if (!isMe) msgDiv.appendChild(nameSpan);
-                    msgDiv.appendChild(textSpan);
-                    stream.appendChild(msgDiv);
-                });
-                stream.scrollTop = stream.scrollHeight;
+                
+                if (initialLoad) {
+                    snapshot.forEach(doc => { renderMessage(doc.data(), stream); });
+                    stream.scrollTop = stream.scrollHeight;
+                    initialLoad = false;
+                } else {
+                    // Only process brand new messages
+                    snapshot.docChanges().forEach(change => {
+                        if (change.type === 'added') {
+                            const data = change.doc.data();
+                            renderMessage(data, stream);
+                            stream.scrollTop = stream.scrollHeight;
+                            
+                            // Trigger Notification if tab is backgrounded
+                            if (!isTabFocused && data.senderEmail !== currentUser.email) {
+                                unreadCount++;
+                                document.title = `(${unreadCount}) New Message!`;
+                            }
+                        }
+                    });
+                }
             }, error => {
                 console.error("Chat sync error: ", error);
             });
@@ -122,8 +172,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function sendMessage() {
         const input = document.getElementById('msg-input');
-        const text = input.value.trim();
+        let text = input.value.trim();
         if (!text) return;
+
+        // Auto-Capitalize check
+        if (autoCapitalize && text.length > 0) {
+            text = text.charAt(0).toUpperCase() + text.slice(1);
+        }
 
         db.collection('messages').add({
             text: text,
@@ -137,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         input.value = '';
     }
 
-    // --- 3. Typing Indicator Logic ---
+    // --- 3. Typing Indicator Logic (Reverted 'You are typing') ---
     document.getElementById('msg-input').addEventListener('input', () => {
         if (!currentRoomCode) return;
         
@@ -158,27 +213,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         unsubscribeTyping = db.collection('rooms').doc(currentRoomCode).onSnapshot(doc => {
             const data = doc.data();
-            if (data && data.typingUser) {
-                // Modified so you can see it working even on your own account!
-                if (data.typingEmail === currentUser.email) {
-                    typingIndicator.textContent = "(You are typing...)";
-                    typingIndicator.style.opacity = "0.5";
-                } else {
-                    typingIndicator.textContent = `${data.typingUser} is typing...`;
-                    typingIndicator.style.opacity = "1";
-                }
+            
+            // Only show if the person typing is NOT you
+            if (data && data.typingUser && data.typingEmail !== currentUser.email) {
+                // Inject their name right next to the bouncing dots
+                document.getElementById('typing-name').textContent = data.typingUser;
                 typingIndicator.classList.remove('hidden');
             } else {
                 typingIndicator.classList.add('hidden');
             }
-        }, error => {
-            console.error("Typing indicator error: ", error);
         });
     }
 
     // --- 4. Settings Menu Logic ---
     document.getElementById('settings-btn').addEventListener('click', () => {
-        console.log("Settings button clicked!"); // Debugging log
         document.getElementById('setting-name').value = currentUser.displayName || '';
         document.getElementById('setting-room').value = currentRoomCode;
         settingsModal.classList.remove('hidden');
@@ -189,14 +237,27 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('save-settings-btn').addEventListener('click', () => {
+        // Name
         const newName = document.getElementById('setting-name').value.trim();
         if (newName && newName !== currentUser.displayName) {
             currentUser.updateProfile({ displayName: newName });
         }
 
+        // Color
         const newColor = document.getElementById('setting-color').value;
         document.documentElement.style.setProperty('--accent', newColor);
+        localStorage.setItem('appColor', newColor);
 
+        // Font
+        const newFont = document.getElementById('setting-font').value;
+        document.documentElement.style.setProperty('--font-family', newFont);
+        localStorage.setItem('appFont', newFont);
+
+        // Auto-Cap
+        autoCapitalize = document.getElementById('setting-capitalize').checked;
+        localStorage.setItem('appCap', autoCapitalize);
+
+        // Room
         const newRoom = document.getElementById('setting-room').value.trim();
         if (newRoom && newRoom !== currentRoomCode) {
             currentRoomCode = newRoom;

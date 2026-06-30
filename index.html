@@ -45,8 +45,22 @@
             </div>
 
             <div class="setting-group">
+                <label>Text Style</label>
+                <select id="setting-font">
+                    <option value="system-ui, -apple-system, sans-serif">Standard</option>
+                    <option value="'OpenDyslexic', sans-serif">Dyslexia Friendly (OpenDyslexic)</option>
+                    <option value="'Comic Sans MS', cursive, sans-serif">Comic Sans</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
                 <label>App Color</label>
                 <input type="color" id="setting-color" value="#ff6b6b">
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="setting-capitalize" checked>
+                <label>Auto-Capitalize First Letter</label>
             </div>
 
             <div class="setting-group">
@@ -70,7 +84,14 @@
             
             <div id="chat-messages" class="messages-stream"></div>
             
-            <div id="typing-indicator" class="msg-sender hidden" style="padding: 0 24px 10px; color: var(--accent);"></div>
+            <div id="typing-indicator" class="typing-indicator-inline hidden">
+                <span id="typing-name" class="msg-sender" style="margin: 0;"></span>
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
             
             <div class="chat-input-bar">
                 <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off">
