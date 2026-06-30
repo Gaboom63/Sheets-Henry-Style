@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sheets. Henry Style</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="auth-container" class="overlay">
+        <div class="glass-card">
+            <h2>Welcome Back</h2>
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button id="login-btn" class="primary-btn">Sign In</button>
+        </div>
+    </div>
+
+    <div id="name-container" class="overlay hidden">
+        <div class="glass-card">
+            <h2>What do you want to be called?</h2>
+            <p class="subtitle">This is how your name will show up in chat.</p>
+            <input type="text" id="display-name-input" placeholder="Your Name">
+            <button id="save-name-btn" class="primary-btn">Save Name</button>
+        </div>
+    </div>
+
+    <div id="room-container" class="overlay hidden">
+        <div class="glass-card">
+            <h2>Join a Room</h2>
+            <p class="subtitle">Enter your secret room code to start chatting.</p>
+            <input type="text" id="room-input" placeholder="e.g. SecretRoom123">
+            <button id="join-room-btn" class="primary-btn">Enter Room</button>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="overlay hidden">
+        <div class="glass-card">
+            <h2>Settings</h2>
+            
+            <div class="setting-group">
+                <label>Change Your Name</label>
+                <input type="text" id="setting-name">
+            </div>
+
+            <div class="setting-group">
+                <label>App Color</label>
+                <input type="color" id="setting-color" value="#ff6b6b">
+            </div>
+
+            <div class="setting-group">
+                <label>Switch Room</label>
+                <input type="text" id="setting-room">
+            </div>
+
+            <div class="modal-buttons">
+                <button id="close-settings-btn" class="secondary-btn">Cancel</button>
+                <button id="save-settings-btn" class="primary-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-container" class="hidden">
+        <main class="chat-area">
+            <header class="header-bar chat-header">
+                <h3 id="room-title">Messaging Room</h3>
+                <button id="settings-btn" class="secondary-btn">⚙️ Settings</button>
+            </header>
+            
+            <div id="chat-messages" class="messages-stream"></div>
+            
+            <div id="typing-indicator" class="msg-sender hidden" style="padding: 0 24px 10px; color: var(--accent);"></div>
+            
+            <div class="chat-input-bar">
+                <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off">
+                <button id="send-btn" class="primary-btn">Send</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
