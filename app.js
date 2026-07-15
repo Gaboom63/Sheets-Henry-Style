@@ -368,13 +368,42 @@ async function uploadToImgBBAndSend(fileOrBlob) {
     });
 
     // --- Settings Menu Saves ---
+// --- Settings Menu Saves ---
     document.getElementById('settings-btn').addEventListener('click', () => {
         document.getElementById('setting-name').value = currentUser.displayName || '';
         settingsModal.classList.remove('hidden');
     });
-
-    localStorage.setItem('imgbbKey', document.getElementById('setting-imgbb-key').value.trim());
     
+    document.getElementById('close-settings-btn').addEventListener('click', () => settingsModal.classList.add('hidden'));
+
+    document.getElementById('save-settings-btn').addEventListener('click', () => {
+        const newName = document.getElementById('setting-name').value.trim();
+        if (newName && newName !== currentUser.displayName) currentUser.updateProfile({ displayName: newName });
+
+        const saveToLocalAndApply = (key, val, cssVar) => {
+            localStorage.setItem(key, val);
+            if (cssVar) document.documentElement.style.setProperty(cssVar, val);
+        }
+
+        saveToLocalAndApply('appColor', document.getElementById('setting-color').value, '--accent');
+        saveToLocalAndApply('appFont', document.getElementById('setting-font').value, '--font-family');
+        saveToLocalAndApply('msgSize', document.getElementById('setting-size').value, '--msg-size');
+        
+        const isBold = document.getElementById('setting-bold').checked;
+        const isItalic = document.getElementById('setting-italic').checked;
+        saveToLocalAndApply('msgBold', isBold, null);
+        saveToLocalAndApply('msgItalic', isItalic, null);
+        document.documentElement.style.setProperty('--msg-weight', isBold ? 'bold' : 'normal');
+        document.documentElement.style.setProperty('--msg-style', isItalic ? 'italic' : 'normal');
+
+        autoCapitalize = document.getElementById('setting-capitalize').checked;
+        localStorage.setItem('appCap', autoCapitalize);
+
+        // ✅ MOVED THIS LINE HERE:
+        localStorage.setItem('imgbbKey', document.getElementById('setting-imgbb-key').value.trim());
+
+        settingsModal.classList.add('hidden');
+    });    
     document.getElementById('close-settings-btn').addEventListener('click', () => settingsModal.classList.add('hidden'));
 
     document.getElementById('save-settings-btn').addEventListener('click', () => {
