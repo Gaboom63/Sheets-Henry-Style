@@ -241,3 +241,32 @@ button:active { transform: scale(0.96); }
     opacity: 0.8;
     pointer-events: none; /* Allows clicking through it if needed */
 }
+
+/* Animated Emoji Support */
+.animated-emoji {
+    width: 1.5em;
+    height: 1.5em;
+    vertical-align: middle;
+    display: inline-block;
+    margin: 0 0.1em;
+}
+
+#room-time {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1rem;
+    opacity: 0.8;
+    pointer-events: none; /* Allows clicking through it if needed */
+}
+
+/* Animated Emoji Support - High Specificity to override regular images */
+.message img.animated-emoji {
+    width: 1.3em;
+    height: 1.3em;
+    display: inline-block;
+    vertical-align: -0.25em; /* Nudges it down slightly to align perfectly with text */
+    margin: 0 0.1em;
+    border-radius: 0;
+    max-width: none;
+}

@@ -7,7 +7,6 @@ const firebaseConfig = {
     messagingSenderId: "1081077842701",
     appId: "1:1081077842701:web:5c5b50d55e82bdb8976644"
 };
-
 // ---------------------------------------
 
 firebase.initializeApp(firebaseConfig);
@@ -21,17 +20,22 @@ let unsubscribeTyping = null;
 let unsubscribeRoomMeta = null;
 let typingTimeout = null;
 let timerInterval = null;
-
 let unreadCount = 0;
 let isTabFocused = true;
 let autoCapitalize = true;
-let hasJoined = false; // Moved to top
+let hasJoined = false;
 
-window.addEventListener('focus', () => { isTabFocused = true; unreadCount = 0; document.title = "Private Chat"; });
-window.addEventListener('blur', () => { isTabFocused = false; });
+window.addEventListener('focus', () => {
+    isTabFocused = true;
+    unreadCount = 0;
+    document.title = "Private Chat";
+});
+
+window.addEventListener('blur', () => {
+    isTabFocused = false;
+});
 
 document.addEventListener('DOMContentLoaded', () => {
-    
     // UI Elements
     const authContainer = document.getElementById('auth-container');
     const nameContainer = document.getElementById('name-container');
@@ -39,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const appContainer = document.getElementById('app-container');
     const settingsModal = document.getElementById('settings-modal');
     const typingIndicator = document.getElementById('typing-indicator');
-    
+
     // Load Saved Settings
     const loadSetting = (key, defaultVal) => localStorage.getItem(key) || defaultVal;
     
@@ -59,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('setting-italic').checked = loadSetting('msgItalic', 'false') === 'true';
     document.getElementById('setting-capitalize').checked = autoCapitalize;
     document.getElementById('setting-imgbb-key').value = loadSetting('imgbbKey', '');
-    
+
     document.getElementById('setting-size').addEventListener('input', (e) => {
         document.getElementById('size-label').textContent = e.target.value + 'px';
     });
@@ -100,8 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startApp() {
         appContainer.classList.remove('hidden');
-        document.getElementById('room-title').textContent = `Room: ${currentRoomCode}`;   
-        
+        document.getElementById('room-title').textContent = `Room: ${currentRoomCode}`;
         updateClock();
         initChat();
         initTypingListener();
@@ -109,9 +112,9 @@ document.addEventListener('DOMContentLoaded', () => {
         trackPresence();
     }
 
-    // --- Media & Camera Logic (UPDATED FOR FREE IMAGE HOSTING) ---
+    // --- Media & Camera Logic ---
     document.getElementById('upload-btn').addEventListener('click', () => document.getElementById('image-upload').click());
-    
+
     document.getElementById('image-upload').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) await uploadToImgBBAndSend(file);
@@ -142,65 +145,55 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.height = cameraFeed.videoHeight;
         canvas.getContext('2d').drawImage(cameraFeed, 0, 0);
         
-        // Convert to blob for upload
         canvas.toBlob(async (blob) => {
             const confirmSend = confirm("Look good? Click OK to send this photo.");
             if (confirmSend) {
                 if (videoStream) videoStream.getTracks().forEach(track => track.stop());
                 cameraModal.classList.add('hidden');
-                
-                // Send the image via ImgBB
                 await uploadToImgBBAndSend(blob);
             }
         }, 'image/jpeg', 0.8);
     });
 
-    // Helper function to upload to ImgBB and save the URL to Firestore
-    // Replace your current uploadToImgBBAndSend function with this one
-async function uploadToImgBBAndSend(fileOrBlob) {
-    // 1. Pull the key directly from Local Storage
-    const imgbbKey = localStorage.getItem('imgbbKey');
-
-    // 2. Stop them if they forgot to paste it in the settings
-    if (!imgbbKey) {
-        alert("Please paste your free ImgBB API key into the Settings menu to send photos!");
-        return;
-    }
-
-    document.getElementById('msg-input').placeholder = "Uploading image...";
-    
-    const formData = new FormData();
-    formData.append("image", fileOrBlob);
-
-    try {
-        // 3. Use the dynamically loaded key here
-        const response = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
-            method: 'POST',
-            body: formData
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-            await db.collection('messages').add({
-                text: "",
-                imageUrl: data.data.url, 
-                senderEmail: currentUser.email,
-                senderName: currentUser.displayName,
-                roomCode: currentRoomCode,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } else {
-            alert("Image upload failed. Double-check your API key in Settings.");
+    async function uploadToImgBBAndSend(fileOrBlob) {
+        const imgbbKey = localStorage.getItem('imgbbKey');
+        if (!imgbbKey) {
+            alert("Please paste your free ImgBB API key into the Settings menu to send photos!");
+            return;
         }
-    } catch (error) {
-        console.error("Upload error:", error);
-        alert("Failed to upload image.");
-    } finally {
-        document.getElementById('msg-input').placeholder = "Type a message...";
+
+        document.getElementById('msg-input').placeholder = "Uploading image...";
+        const formData = new FormData();
+        formData.append("image", fileOrBlob);
+
+        try {
+            const response = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                await db.collection('messages').add({
+                    text: "",
+                    imageUrl: data.data.url,
+                    senderEmail: currentUser.email,
+                    senderName: currentUser.displayName,
+                    roomCode: currentRoomCode,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } else {
+                alert("Image upload failed. Double-check your API key in Settings.");
+            }
+        } catch (error) {
+            console.error("Upload error:", error);
+            alert("Failed to upload image.");
+        } finally {
+            document.getElementById('msg-input').placeholder = "Type a message...";
+        }
     }
-}
-    
-    // --- Message Rendering & Chat Sync (OPTIMIZED READS) ---
+
+    // --- Message Rendering & Chat Sync ---
     function renderMessage(data, stream) {
         const msgDiv = document.createElement('div');
         
@@ -217,14 +210,30 @@ async function uploadToImgBBAndSend(fileOrBlob) {
         
         const nameSpan = document.createElement('div');
         nameSpan.className = 'msg-sender';
-        
         const senderDisplay = data.senderName || (data.senderEmail ? data.senderEmail.split('@')[0] : 'Unknown');
         nameSpan.textContent = senderDisplay;
         
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
         
-        if (data.text) contentDiv.textContent = data.text;
+        if (data.text) {
+            // Escape HTML to prevent injection
+            const escapeHTML = (str) => str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
+            let safeText = escapeHTML(data.text);
+            
+            // Swap text emojis for Google Noto Animated WebP Emojis
+            const emojiRegex = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu;
+            safeText = safeText.replace(emojiRegex, (match) => {
+                let hexCode = Array.from(match)
+                    .map(char => char.codePointAt(0).toString(16))
+                    .filter(hex => hex !== 'fe0f') // Strip invisible variation selectors
+                    .join('_');
+                return `<img src="https://fonts.gstatic.com/s/e/notoemoji/latest/${hexCode}/512.webp" class="animated-emoji" alt="${match}" onerror="this.onerror=null; this.outerHTML='${match}'">`;
+            });
+
+            contentDiv.innerHTML = safeText;
+        }
+
         if (data.imageUrl) {
             const img = document.createElement('img');
             img.src = data.imageUrl;
@@ -240,14 +249,12 @@ async function uploadToImgBBAndSend(fileOrBlob) {
         if (unsubscribeChat) unsubscribeChat();
         const stream = document.getElementById('chat-messages');
         
-        // limitToLast(20) keeps reads low, orderBy asc keeps them in the right order naturally
         unsubscribeChat = db.collection('messages')
             .where('roomCode', '==', currentRoomCode)
             .orderBy('timestamp', 'asc')
             .limitToLast(20)
             .onSnapshot((snapshot) => {
-                // Prevent duplicate UI renders from local cache when writing
-                if (snapshot.metadata.hasPendingWrites) return; 
+                if (snapshot.metadata.hasPendingWrites) return;
                 
                 stream.innerHTML = '';
                 snapshot.forEach(doc => {
@@ -256,7 +263,7 @@ async function uploadToImgBBAndSend(fileOrBlob) {
                 
                 setTimeout(() => {
                     stream.scrollTop = stream.scrollHeight;
-                }, 100); 
+                }, 100);
             });
     }
     
@@ -266,39 +273,33 @@ async function uploadToImgBBAndSend(fileOrBlob) {
     function sendMessage() {
         const input = document.getElementById('msg-input');
         let text = input.value.trim();
+        
         if (!text) return;
-
         if (autoCapitalize && text.length > 0) {
             text = text.charAt(0).toUpperCase() + text.slice(1);
         }
-
-        const timestamp = firebase.firestore.FieldValue.serverTimestamp();
 
         db.collection('messages').add({
             text: text,
             senderEmail: currentUser.email,
             senderName: currentUser.displayName,
             roomCode: currentRoomCode,
-            timestamp: timestamp 
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
         }).catch(err => {
             console.error("Firebase Error: ", err);
             alert("Failed to send: " + err.message);
         });
 
-        // Clear input immediately
         input.value = '';
-        
-        // Force typing indicator to turn off immediately
         isTyping = false;
         db.collection('rooms').doc(currentRoomCode).set({ typingUser: null, typingEmail: null }, { merge: true });
     }
-     
-    // --- Typing Logic (OPTIMIZED WRITES) ---
+
+    // --- Typing Logic ---
     let isTyping = false;
     document.getElementById('msg-input').addEventListener('input', () => {
         if (!currentRoomCode) return;
         
-        // Only write to database ONCE when you start typing, not every keystroke
         if (!isTyping) {
             isTyping = true;
             db.collection('rooms').doc(currentRoomCode).set({ typingUser: currentUser.displayName, typingEmail: currentUser.email }, { merge: true });
@@ -325,7 +326,7 @@ async function uploadToImgBBAndSend(fileOrBlob) {
         });
     }
 
-    // 24 Hour Timer & 2-Party Consent Wipe
+    // --- Room Manager ---
     function initRoomManager() {
         if (unsubscribeRoomMeta) unsubscribeRoomMeta();
         
@@ -334,7 +335,7 @@ async function uploadToImgBBAndSend(fileOrBlob) {
             
             if (!data || !data.clearsAt) {
                 await db.collection('rooms').doc(currentRoomCode).set({ clearsAt: Date.now() + 86400000, clearRequests: [] }, { merge: true });
-                return; 
+                return;
             }
 
             if ((data.clearRequests && data.clearRequests.length >= 2) || (Date.now() >= data.clearsAt)) {
@@ -345,11 +346,11 @@ async function uploadToImgBBAndSend(fileOrBlob) {
             clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 const hoursLeft = Math.max(0, Math.ceil((data.clearsAt - Date.now()) / (1000 * 60 * 60)));
-                document.getElementById('countdown-timer').textContent = `⏳ Clearing in ${hoursLeft} Hours`;
+                document.getElementById('countdown-timer').textContent = `  Clearing in ${hoursLeft} Hours`;
             }, 60000);
             
             const initHours = Math.max(0, Math.ceil((data.clearsAt - Date.now()) / (1000 * 60 * 60)));
-            document.getElementById('countdown-timer').textContent = `⏳ Clearing in ${initHours} Hours`;
+            document.getElementById('countdown-timer').textContent = `  Clearing in ${initHours} Hours`;
         });
     }
 
@@ -368,22 +369,21 @@ async function uploadToImgBBAndSend(fileOrBlob) {
     });
 
     // --- Settings Menu Saves ---
-// --- Settings Menu Saves ---
     document.getElementById('settings-btn').addEventListener('click', () => {
         document.getElementById('setting-name').value = currentUser.displayName || '';
         settingsModal.classList.remove('hidden');
     });
     
     document.getElementById('close-settings-btn').addEventListener('click', () => settingsModal.classList.add('hidden'));
-
+    
     document.getElementById('save-settings-btn').addEventListener('click', () => {
         const newName = document.getElementById('setting-name').value.trim();
         if (newName && newName !== currentUser.displayName) currentUser.updateProfile({ displayName: newName });
-
+        
         const saveToLocalAndApply = (key, val, cssVar) => {
             localStorage.setItem(key, val);
             if (cssVar) document.documentElement.style.setProperty(cssVar, val);
-        }
+        };
 
         saveToLocalAndApply('appColor', document.getElementById('setting-color').value, '--accent');
         saveToLocalAndApply('appFont', document.getElementById('setting-font').value, '--font-family');
@@ -393,92 +393,62 @@ async function uploadToImgBBAndSend(fileOrBlob) {
         const isItalic = document.getElementById('setting-italic').checked;
         saveToLocalAndApply('msgBold', isBold, null);
         saveToLocalAndApply('msgItalic', isItalic, null);
+        
         document.documentElement.style.setProperty('--msg-weight', isBold ? 'bold' : 'normal');
         document.documentElement.style.setProperty('--msg-style', isItalic ? 'italic' : 'normal');
-
+        
         autoCapitalize = document.getElementById('setting-capitalize').checked;
         localStorage.setItem('appCap', autoCapitalize);
-
-        // ✅ MOVED THIS LINE HERE:
         localStorage.setItem('imgbbKey', document.getElementById('setting-imgbb-key').value.trim());
-
-        settingsModal.classList.add('hidden');
-    });    
-    document.getElementById('close-settings-btn').addEventListener('click', () => settingsModal.classList.add('hidden'));
-
-    document.getElementById('save-settings-btn').addEventListener('click', () => {
-        const newName = document.getElementById('setting-name').value.trim();
-        if (newName && newName !== currentUser.displayName) currentUser.updateProfile({ displayName: newName });
-
-        const saveToLocalAndApply = (key, val, cssVar) => {
-            localStorage.setItem(key, val);
-            if (cssVar) document.documentElement.style.setProperty(cssVar, val);
-        }
-
-        saveToLocalAndApply('appColor', document.getElementById('setting-color').value, '--accent');
-        saveToLocalAndApply('appFont', document.getElementById('setting-font').value, '--font-family');
-        saveToLocalAndApply('msgSize', document.getElementById('setting-size').value, '--msg-size');
         
-        const isBold = document.getElementById('setting-bold').checked;
-        const isItalic = document.getElementById('setting-italic').checked;
-        saveToLocalAndApply('msgBold', isBold, null);
-        saveToLocalAndApply('msgItalic', isItalic, null);
-        document.documentElement.style.setProperty('--msg-weight', isBold ? 'bold' : 'normal');
-        document.documentElement.style.setProperty('--msg-style', isItalic ? 'italic' : 'normal');
-
-        autoCapitalize = document.getElementById('setting-capitalize').checked;
-        localStorage.setItem('appCap', autoCapitalize);
-
         settingsModal.classList.add('hidden');
     });
 
     document.getElementById('video-call-btn').addEventListener('click', () => {
         window.open(`https://meet.jit.si/${currentRoomCode}-private-video`, '_blank');
     });
-});
 
-function updateClock() {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('en-US', { 
-        hour12: false, 
-        hour: '2-digit', 
-        minute: '2-digit' 
+    function updateClock() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('en-US', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        document.getElementById('room-time').textContent = timeString;
+    }
+    setInterval(updateClock, 10000);
+
+    // Toggle Emoji Picker
+    const picker = document.getElementById('emoji-picker');
+    document.getElementById('emoji-btn').addEventListener('click', () => picker.classList.toggle('hidden'));
+    
+    picker.addEventListener('emoji-click', event => {
+        const input = document.getElementById('msg-input');
+        input.value += event.detail.unicode;
+        picker.classList.add('hidden');
     });
-    document.getElementById('room-time').textContent = timeString;
-}
-setInterval(updateClock, 10000);
 
-// Toggle Emoji Picker
-const picker = document.getElementById('emoji-picker');
-document.getElementById('emoji-btn').addEventListener('click', () => picker.classList.toggle('hidden'));
-
-picker.addEventListener('emoji-click', event => {
-    const input = document.getElementById('msg-input');
-    input.value += event.detail.unicode;
-    picker.classList.add('hidden');
-});
-
-// Presence System (Join/Leave - OPTIMIZED WITH SESSION STORAGE)
-function trackPresence() {
-    // Only send the join message once per browser session to prevent refresh-spam
-    if (!sessionStorage.getItem('hasJoinedSession')) {
-        sessionStorage.setItem('hasJoinedSession', 'true');
-        db.collection('messages').add({
-            text: `${currentUser.displayName} Joined The Chat! Welcome ${currentUser.displayName}!`,
-            isSystem: true,
-            roomCode: currentRoomCode,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    // --- Presence System ---
+    function trackPresence() {
+        if (!sessionStorage.getItem('hasJoinedSession')) {
+            sessionStorage.setItem('hasJoinedSession', 'true');
+            db.collection('messages').add({
+                text: `${currentUser.displayName} Joined The Chat! Welcome ${currentUser.displayName}!`,
+                isSystem: true,
+                roomCode: currentRoomCode,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        
+        window.addEventListener('beforeunload', () => {
+            sessionStorage.removeItem('hasJoinedSession');
+            db.collection('messages').add({
+                text: `${currentUser.displayName} left the chat. Goodbye ${currentUser.displayName} :(`,
+                isSystem: true,
+                roomCode: currentRoomCode,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
         });
     }
-}
-
-window.addEventListener('beforeunload', () => {
-    // Clear the session so it triggers again if they actually close and come back later
-    sessionStorage.removeItem('hasJoinedSession');
-    db.collection('messages').add({
-        text: `${currentUser.displayName} left the chat. Goodbye ${currentUser.displayName} :(`,
-        isSystem: true,
-        roomCode: currentRoomCode,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
 });
